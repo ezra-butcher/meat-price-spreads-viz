@@ -1,0 +1,10 @@
+dash>=2.17
+plotly>=5.22
+pandas>=2.0,<3
+numpy>=1.26,<2          # pmdarima 2.0.4 wheels are built against the numpy 1.x ABI
+requests>=2.31
+pmdarima==2.0.4
+statsmodels>=0.14,<0.15
+scikit-learn>=1.3,<1.6  # pmdarima 2.0.4 uses sklearn internals removed in 1.6
+pyarrow>=14
+gunicorn>=22
