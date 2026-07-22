@@ -128,19 +128,27 @@ A cron job runs `refresh_data.sh` monthly after each ERS release (typically mid-
 
 ### Running alongside the other dashboards on this host
 
-Three sibling Dash apps share this home server, each on its own port so they
-can run simultaneously:
+Three sibling Dash apps share this home server, each on its own local port:
 
-| App | Port |
+| App | Local port |
 |---|---|
 | `cold-storage-viz` | 8050 |
 | `swine-contract-library` | 8051 |
 | `meat-price-spreads-viz` (this app) | 8052 |
 
-If exposing all three via a single Tailscale Funnel node, you'll need either
-multiple Funnel ports (Funnel only allows 443/8443/10000 publicly) or
-path-based routing via `tailscale serve` in front of all three — see
-`tailscale funnel --help` and `tailscale serve --help`.
+Tailscale Funnel only allows public exposure on three ports total (443, 8443,
+10000), so rather than give each app its own Funnel port (which caps you at
+exactly three public dashboards, ever), this app is exposed at a **sub-path**
+on a shared Funnel port instead — `https://<host>.ts.net:8443/meat-spreads`
+— via `tailscale serve`'s path-based routing, leaving room for any number of
+future dashboards on that same port. `cold-storage-viz` keeps its existing
+root-path setup on 443 undisturbed.
+
+This requires the app to know its own URL prefix — set via the
+`DASH_URL_BASE_PATHNAME` env var (see `meat-price-spreads-viz.service`),
+which Dash reads natively. Defaults to `/` (root) for local dev; only the
+production container sets it to `/meat-spreads/`. See OPERATIONS.md for the
+exact `tailscale serve`/`funnel` commands used.
 
 ### Embedding in Google Sites
 

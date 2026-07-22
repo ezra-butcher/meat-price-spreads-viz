@@ -4,6 +4,7 @@ Run: python app.py
 """
 
 import colorsys
+import os
 import pathlib
 import re
 import pandas as pd
@@ -214,7 +215,14 @@ _card = {"background": "#fff", "borderRadius": "6px", "boxShadow": "0 1px 3px rg
 _dd_sm = {"width": "100px", "fontSize": "12px"}
 _dd_yr = {"width": "80px", "fontSize": "12px"}
 
-app = Dash(__name__, title="USDA Meat Price Spreads")
+# Set DASH_URL_BASE_PATHNAME (e.g. "/meat-spreads/", both slashes required) when
+# this app is served at a sub-path behind a shared reverse proxy/Funnel port
+# alongside other dashboards on the same host. Defaults to root for local dev.
+app = Dash(
+    __name__,
+    title="USDA Meat Price Spreads",
+    url_base_pathname=os.environ.get("DASH_URL_BASE_PATHNAME", "/"),
+)
 server = app.server  # WSGI entry point for gunicorn
 
 app.layout = html.Div(

@@ -10,9 +10,14 @@ ExecStartPre=-/usr/bin/docker stop meat-price-spreads-viz
 ExecStartPre=-/usr/bin/docker rm meat-price-spreads-viz
 # No API key needed — the app only reads data/, and fetch_data.py pulls public
 # ERS file downloads with no credentials
+# DASH_URL_BASE_PATHNAME: this app is served at a sub-path behind a shared
+# Funnel port (8443) alongside other dashboards on the same host — see
+# OPERATIONS.md "Tailscale Funnel". Drop this env var (or set to "/") to run
+# at root instead.
 ExecStart=/usr/bin/docker run --rm --pull=never --name meat-price-spreads-viz \
     -v /home/user/meat-price-spreads-viz/data:/app/data:rw \
     -p 127.0.0.1:8052:8052 \
+    -e DASH_URL_BASE_PATHNAME=/meat-spreads/ \
     localhost/meat-price-spreads-viz:latest
 ExecStop=/usr/bin/docker stop meat-price-spreads-viz
 
