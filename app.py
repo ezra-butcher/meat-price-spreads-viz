@@ -231,7 +231,8 @@ app.layout = html.Div(
         html.H2("USDA Meat Price Spreads", style={"marginBottom": "2px", "fontSize": "20px"}),
         html.P(
             "Source: USDA ERS Meat Price Spreads — monthly farm, wholesale, and retail "
-            "values and spreads for beef, pork, and broilers (chicken)",
+            "values and spreads for beef, pork, and broilers (chicken). "
+            "Independent project, not affiliated with or endorsed by USDA.",
             style={"color": "#777", "fontSize": "12px", "marginTop": 0, "marginBottom": "12px"},
         ),
 
@@ -564,6 +565,7 @@ def download_csv(_, commodities, series_vals, unit,
     Output("line-desc-panel", "children"),
     Output("hist-desc-panel", "children"),
     Input("commodity-select", "value"),
+    Input("series-type-select", "value"),
     Input("series-select", "value"),
     Input("unit-toggle", "value"),
     Input("start-month", "value"),
@@ -576,7 +578,7 @@ def download_csv(_, commodities, series_vals, unit,
     Input("zero-btn", "n_clicks"),
     Input("palette-store", "data"),
 )
-def update_charts(commodities, series_vals, unit,
+def update_charts(commodities, series_type, series_vals, unit,
                   start_month, start_year, end_month, end_year,
                   outlier_clicks, forecast_horizon, fitted_clicks, zero_clicks, palette):
 
@@ -593,13 +595,23 @@ def update_charts(commodities, series_vals, unit,
     start_date = pd.Timestamp(year=start_year, month=start_month, day=1)
     end_date = pd.Timestamp(year=end_year, month=end_month, day=1)
 
-    mask = (df["commodity_desc"].isin(commodities)) & (df["date"] >= start_date) & (df["date"] <= end_date)
+    # Always constrain to the selected series type — the Series dropdown only
+    # offers same-type options, but with an empty selection ("All series") the
+    # fallback would otherwise mix %, ¢/lb values, and ¢/lb spreads on one axis
+    mask = (
+        (df["commodity_desc"].isin(commodities))
+        & (df["series_type"] == series_type)
+        & (df["date"] >= start_date) & (df["date"] <= end_date)
+    )
     subset = df[mask].copy()
     if series_vals:
         subset = subset[subset["series_key"].isin(series_vals)]
 
     base_unit = subset["unit_desc"].mode()[0] if "unit_desc" in subset.columns and not subset.empty else "¢/lb"
     ylabel = y_axis_label(unit, base_unit)
+    # Displayed values are percentages (share series in level terms, or any
+    # %-change unit) — used for axis tick formatting
+    pct_axis = unit in ("pct", "yoy_pct") or (unit == "actual" and _short_unit(base_unit) == "%")
     groups = sorted(subset["series_key"].unique()) if not subset.empty else []
     all_labels = sorted(df[df["commodity_desc"].isin(commodities)]["series_key"].unique().tolist())
 
@@ -770,7 +782,7 @@ def update_charts(commodities, series_vals, unit,
         legend=dict(orientation="h", y=-0.28, font_size=11),
         margin=dict(l=70, r=20, t=40, b=90),
         plot_bgcolor="#fff", paper_bgcolor="#fff",
-        xaxis=dict(showgrid=True, gridcolor="#eee"),
+        xaxis=dict(showgrid=True, gridcolor="#eee", ticksuffix="%" if pct_axis else ""),
         yaxis=dict(showgrid=True, gridcolor="#eee"),
     )
 

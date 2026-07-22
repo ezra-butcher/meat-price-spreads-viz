@@ -9,7 +9,7 @@ Run after fetch_data.py:
 Uses bounded stepwise auto_arima:
   ARIMA:    p in [0,3], d in [0,1] (unit-root tested), q in [0,3]
   Seasonal: P in [0,1], D in [0,1], Q in [0,1], m=12
-  ~28s/series, ~10 min total for 20 series
+  ~28s/series, ~13 min total for 28 series
 
 Each series is fit on its contiguous monthly tail (observations after the last
 calendar gap) — series whose tail is shorter than 24 months are skipped.

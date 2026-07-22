@@ -4,6 +4,9 @@ An interactive web dashboard for visualizing USDA ERS Meat Price Spreads data �
 
 Built with Plotly Dash, designed to be self-hosted and embedded in a Google Sites page.
 
+> This is an independent project built on publicly available data. It is not
+> affiliated with or endorsed by the U.S. Department of Agriculture.
+
 ## Features
 
 - **Line charts and histograms** of price levels and spreads by commodity and value-chain stage
@@ -51,13 +54,22 @@ retail share    = (retail value − wholesale value) / retail value
 
 For beef and pork these three sum to 100% of the retail dollar. Chicken gets a 2-way split instead (`wholesale share` + `retail share` only, no farm share) since it has no farm value to subtract — these are the series shown by default when you select a commodity.
 
+Two properties of the share **forecasts** worth knowing:
+- Each share series is fit by its own independent SARIMA model, so forecast
+  shares sum to roughly — not exactly — 100% (typically within ±2%).
+- Forecast confidence intervals are deliberately **not** clipped at zero. A
+  negative wholesale share means wholesale value below net farm value — a
+  negative packer margin — which has occurred historically, so a CI that spans
+  zero is economically meaningful, not a bug.
+
 Cut-level retail prices (chicken breast, pork chops, specific beef cuts, etc.) and CPI series are also published by ERS on this page but are **not** pulled here — this dashboard is scoped to the farm/wholesale/retail spread structure.
 
 ## Setup
 
 ### Prerequisites
 
-- Python 3.8+ (Docker image uses 3.12)
+- Python 3.9–3.12 (Docker image uses 3.12; the pinned `numpy`/`pmdarima`
+  versions rule out 3.8 and 3.13)
 
 ### Install
 
@@ -78,7 +90,7 @@ Or run each step individually:
 
 ```bash
 python fetch_data.py       # ~seconds — pulls the ERS CSV files
-python fit_forecasts.py    # ~10 min — fits SARIMA models for ~20 series
+python fit_forecasts.py    # ~13 min — fits SARIMA models for 28 series
 python app.py              # starts the Dash app on http://localhost:8052
 ```
 
@@ -119,36 +131,30 @@ sudo systemctl enable --now meat-price-spreads-viz
 
 ### Monthly data refresh
 
-A cron job runs `refresh_data.sh` monthly after each ERS release (typically mid-month):
+Schedule `refresh_data.sh` via cron to run once a month after the ERS release
+(the files are updated mid-month — check the
+[dataset page](https://www.ers.usda.gov/data-products/meat-price-spreads) for
+the current schedule). The script re-fetches the CSVs, refits all SARIMA
+models, and restarts the service; the final `systemctl restart` step needs
+passwordless sudo scoped to that one command (a one-line file in
+`/etc/sudoers.d/`) to run unattended.
 
-```bash
-# Example crontab entry — 6am on the 15th of each month
-0 6 15 * * /path/to/meat-price-spreads-viz/refresh_data.sh
-```
+### Running alongside other dashboards on one host
 
-### Running alongside the other dashboards on this host
+The app listens on local port 8052 (configurable in `app.py`, the `Dockerfile`,
+and the service file), so it can coexist with other Dash apps on their own
+ports behind one Tailscale node.
 
-Three sibling Dash apps share this home server, each on its own local port:
-
-| App | Local port |
-|---|---|
-| `cold-storage-viz` | 8050 |
-| `swine-contract-library` | 8051 |
-| `meat-price-spreads-viz` (this app) | 8052 |
-
-Tailscale Funnel only allows public exposure on three ports total (443, 8443,
-10000). Path-based routing via `tailscale serve --set-path` was tried to get
-around that ceiling, but hit an open Tailscale bug
-([tailscale/tailscale#12413](https://github.com/tailscale/tailscale/issues/12413))
-where `--set-path` breaks apps that load sub-resources at absolute paths —
-which describes any Dash app. So for now, this app gets its own Funnel port
-(8443) at root, same as `cold-storage-viz` on 443. That leaves exactly one
-more port (10000) for `swine-contract-library` or a future dashboard — if a
-fourth ever comes along, revisit path-based routing via a dedicated reverse
-proxy (Caddy/nginx) rather than Tailscale's own `--set-path`.
-
-`app.py` still supports serving at a sub-path via the `DASH_URL_BASE_PATHNAME`
-env var (unset/`/` by default) if that route is revisited later.
+One sharp edge worth knowing: Tailscale Funnel only allows public exposure on
+three ports per node (443, 8443, 10000), and its path-based routing
+(`tailscale serve --set-path`) currently breaks apps that load sub-resources
+at absolute paths — which describes any Dash app — due to an open bug,
+[tailscale/tailscale#12413](https://github.com/tailscale/tailscale/issues/12413).
+Until that's fixed, give each Dash app its own Funnel port; past three apps,
+put a dedicated reverse proxy (Caddy/nginx) on one funneled port and let it do
+the path routing. `app.py` supports serving at a sub-path via the
+`DASH_URL_BASE_PATHNAME` env var (unset/`/` by default) for exactly that
+setup.
 
 ### Embedding in Google Sites
 
