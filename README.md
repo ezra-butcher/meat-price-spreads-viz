@@ -137,18 +137,18 @@ Three sibling Dash apps share this home server, each on its own local port:
 | `meat-price-spreads-viz` (this app) | 8052 |
 
 Tailscale Funnel only allows public exposure on three ports total (443, 8443,
-10000), so rather than give each app its own Funnel port (which caps you at
-exactly three public dashboards, ever), this app is exposed at a **sub-path**
-on a shared Funnel port instead — `https://<host>.ts.net:8443/meat-spreads`
-— via `tailscale serve`'s path-based routing, leaving room for any number of
-future dashboards on that same port. `cold-storage-viz` keeps its existing
-root-path setup on 443 undisturbed.
+10000). Path-based routing via `tailscale serve --set-path` was tried to get
+around that ceiling, but hit an open Tailscale bug
+([tailscale/tailscale#12413](https://github.com/tailscale/tailscale/issues/12413))
+where `--set-path` breaks apps that load sub-resources at absolute paths —
+which describes any Dash app. So for now, this app gets its own Funnel port
+(8443) at root, same as `cold-storage-viz` on 443. That leaves exactly one
+more port (10000) for `swine-contract-library` or a future dashboard — if a
+fourth ever comes along, revisit path-based routing via a dedicated reverse
+proxy (Caddy/nginx) rather than Tailscale's own `--set-path`.
 
-This requires the app to know its own URL prefix — set via the
-`DASH_URL_BASE_PATHNAME` env var (see `meat-price-spreads-viz.service`),
-which Dash reads natively. Defaults to `/` (root) for local dev; only the
-production container sets it to `/meat-spreads/`. See OPERATIONS.md for the
-exact `tailscale serve`/`funnel` commands used.
+`app.py` still supports serving at a sub-path via the `DASH_URL_BASE_PATHNAME`
+env var (unset/`/` by default) if that route is revisited later.
 
 ### Embedding in Google Sites
 
