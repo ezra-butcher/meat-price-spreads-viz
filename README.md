@@ -102,7 +102,7 @@ python app.py              # starts the Dash app on http://localhost:8052
 
 ## Deployment (Docker + systemd + Tailscale)
 
-The included `Dockerfile` and `meat-price-spreads-viz.service` are set up for self-hosting on a home server with public access via [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), following the same pattern as the companion [cold storage dashboard](https://github.com/ezra-butcher/usda-cold-storage-visualization).
+The included `Dockerfile` and `meat-price-spreads-viz.service` are set up for self-hosting on a home server with public access via [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), following the same pattern as the companion [cold storage dashboard](https://github.com/ezra-butcher/cold-storage-viz).
 
 ### Build and run with Docker
 
