@@ -7,6 +7,10 @@ Built with Plotly Dash, designed to be self-hosted and embedded in a Google Site
 > This is an independent project built on publicly available data. It is not
 > affiliated with or endorsed by the U.S. Department of Agriculture.
 
+**[Live dashboard →](https://sites.google.com/view/ezrabutcher/tools/usda-meat-price-spreads-dashboard)**
+
+![Dashboard screenshot showing retail-dollar share series for beef, pork, and chicken](docs/screenshot.png)
+
 ## Features
 
 - **Line charts and histograms** of price levels and spreads by commodity and value-chain stage
@@ -174,6 +178,8 @@ meat-price-spreads-viz/
 ├── Dockerfile
 ├── meat-price-spreads-viz.service  # systemd unit file
 ├── requirements.txt
+├── docs/
+│   └── screenshot.png
 └── data/                          # Generated — not committed
     ├── meat_price_spreads.parquet
     ├── forecasts.parquet
