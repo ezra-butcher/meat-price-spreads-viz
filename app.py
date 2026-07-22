@@ -405,6 +405,11 @@ app.layout = html.Div(
                     "fontSize": "12px", "color": "#555", "paddingBottom": "10px", "lineHeight": "1.6"}),
             ]),
         ]),
+        html.Div(
+            html.A("View on GitHub", href="https://github.com/ezra-butcher/meat-price-spreads-viz",
+                   target="_blank", style={"color": "#888", "fontSize": "11px"}),
+            style={"textAlign": "center", "padding": "8px"},
+        ),
         dcc.Store(id="palette-store", data="default"),
     ],
 )

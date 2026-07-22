@@ -4,25 +4,26 @@
 # ERS releases the Meat Price Spreads update mid-month):
 #   0 6 15 * * /path/to/repo/refresh_data.sh >> /var/log/meat-price-spreads-viz-refresh.log 2>&1
 #
-# Podman users: local images are fully qualified — invoke as
-#   MEAT_SPREADS_IMAGE=localhost/meat-price-spreads-viz:latest ./refresh_data.sh
+# Defaults assume Podman (aliased as docker), which requires the fully
+# qualified localhost/ image name and --pull=never for local-only images —
+# override MEAT_SPREADS_IMAGE if running on real Docker instead.
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE="${MEAT_SPREADS_IMAGE:-meat-price-spreads-viz:latest}"
+IMAGE="${MEAT_SPREADS_IMAGE:-localhost/meat-price-spreads-viz:latest}"
 
 echo "[$(date -Iseconds)] Starting meat price spreads data refresh"
 
 # No API key needed — ERS files are public downloads
-docker run --rm \
+docker run --rm --pull=never \
     -v "$REPO_DIR/data:/app/data:rw" \
     "$IMAGE" \
     python fetch_data.py
 
 echo "[$(date -Iseconds)] Data fetched, fitting SARIMA forecasts (~10 min)..."
 
-docker run --rm \
+docker run --rm --pull=never \
     -v "$REPO_DIR/data:/app/data:rw" \
     "$IMAGE" \
     python fit_forecasts.py
