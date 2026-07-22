@@ -26,7 +26,7 @@ Built with Plotly Dash, designed to be self-hosted and embedded in a Google Site
 [USDA ERS Meat Price Spreads](https://www.ers.usda.gov/data-products/meat-price-spreads) — plain CSV downloads, no API key or signup required, updated monthly.
 
 The dashboard combines two kinds of ERS files:
-- The **historical monthly file** (1970–most recent full year), refreshed roughly annually
+- The **historical monthly file** (1970 through the most recent complete year)
 - The **current beef/pork/broiler files**, updated monthly, used to extend each series past the historical file's cutoff
 
 Series pulled, per commodity:
@@ -68,6 +68,8 @@ Two properties of the share **forecasts** worth knowing:
 
 Cut-level retail prices (chicken breast, pork chops, specific beef cuts, etc.) and CPI series are also published by ERS on this page but are **not** pulled here — this dashboard is scoped to the farm/wholesale/retail spread structure.
 
+Data credit: U.S. Department of Agriculture, Economic Research Service, *Meat Price Spreads* data product.
+
 ## Setup
 
 ### Prerequisites
@@ -78,7 +80,7 @@ Cut-level retail prices (chicken breast, pork chops, specific beef cuts, etc.) a
 ### Install
 
 ```bash
-git clone <this-repo-url>
+git clone https://github.com/ezra-butcher/meat-price-spreads-viz.git
 cd meat-price-spreads-viz
 pip install -r requirements.txt
 ```
@@ -143,22 +145,14 @@ models, and restarts the service; the final `systemctl restart` step needs
 passwordless sudo scoped to that one command (a one-line file in
 `/etc/sudoers.d/`) to run unattended.
 
-### Running alongside other dashboards on one host
+### Tailscale gotcha
 
-The app listens on local port 8052 (configurable in `app.py`, the `Dockerfile`,
-and the service file), so it can coexist with other Dash apps on their own
-ports behind one Tailscale node.
-
-One sharp edge worth knowing: Tailscale Funnel only allows public exposure on
-three ports per node (443, 8443, 10000), and its path-based routing
-(`tailscale serve --set-path`) currently breaks apps that load sub-resources
-at absolute paths — which describes any Dash app — due to an open bug,
+Funnel's path-based routing (`tailscale serve --set-path`) currently breaks
+Dash apps — they load sub-resources at absolute paths, which trips
 [tailscale/tailscale#12413](https://github.com/tailscale/tailscale/issues/12413).
-Until that's fixed, give each Dash app its own Funnel port; past three apps,
-put a dedicated reverse proxy (Caddy/nginx) on one funneled port and let it do
-the path routing. `app.py` supports serving at a sub-path via the
-`DASH_URL_BASE_PATHNAME` env var (unset/`/` by default) for exactly that
-setup.
+Give the app its own Funnel port instead, or put a real reverse proxy on one
+funneled port; `app.py` supports sub-path serving via the
+`DASH_URL_BASE_PATHNAME` env var (unset/`/` by default) for the proxy case.
 
 ### Embedding in Google Sites
 
