@@ -127,6 +127,58 @@ def _parse_retail_cuts_broiler(df: pd.DataFrame) -> pd.DataFrame:
     return df[["date", "commodity_desc", "series_label", "Value", "unit_desc"]]
 
 
+def _pivot_series(df: pd.DataFrame, commodity: str, labels: list) -> pd.DataFrame:
+    sub = df[(df["commodity_desc"] == commodity) & (df["series_label"].isin(labels))]
+    return sub.pivot_table(index="date", columns="series_label", values="Value")
+
+
+def _melt_shares(shares: pd.DataFrame, commodity: str) -> pd.DataFrame:
+    long = shares.reset_index().melt(id_vars="date", var_name="series_label", value_name="Value")
+    long["commodity_desc"] = commodity
+    long["unit_desc"] = "Percent"
+    return long
+
+
+def add_share_series(df: pd.DataFrame) -> pd.DataFrame:
+    """Farm/wholesale/retail share of the retail dollar, computed from our own
+    net farm / wholesale / retail series rather than pulled from ERS's own
+    (differently-scoped) share columns, so they stay internally consistent
+    with the value series in this dataset.
+
+    Beef and pork get the full 3-way split. Broilers (chicken) have no
+    published farm value — production is vertically integrated — so chicken
+    gets a 2-way wholesale/retail split instead of being left out or shown in
+    ¢/lb (which wouldn't be comparable on the same percent axis as the others).
+    """
+    share_rows = []
+
+    for commodity in ("BEEF", "PORK"):
+        wide = _pivot_series(df, commodity, ["Net farm value", "Wholesale value", "Retail value"])
+        if not {"Net farm value", "Wholesale value", "Retail value"}.issubset(wide.columns):
+            continue
+        farm, wholesale, retail = wide["Net farm value"], wide["Wholesale value"], wide["Retail value"]
+        shares = pd.DataFrame({
+            "Farm share of retail value": farm / retail * 100,
+            "Wholesale share of retail value": (wholesale - farm) / retail * 100,
+            "Retail share of retail value": (retail - wholesale) / retail * 100,
+        })
+        share_rows.append(_melt_shares(shares, commodity))
+
+    wide = _pivot_series(df, "CHICKEN", ["Wholesale value", "Retail value"])
+    if {"Wholesale value", "Retail value"}.issubset(wide.columns):
+        wholesale, retail = wide["Wholesale value"], wide["Retail value"]
+        shares = pd.DataFrame({
+            "Wholesale share of retail value": wholesale / retail * 100,
+            "Retail share of retail value": (retail - wholesale) / retail * 100,
+        })
+        share_rows.append(_melt_shares(shares, "CHICKEN"))
+
+    if not share_rows:
+        return df
+    shares_df = pd.concat(share_rows, ignore_index=True).dropna(subset=["Value"])
+    return pd.concat([df, shares_df[["date", "commodity_desc", "series_label", "Value", "unit_desc"]]], ignore_index=True)
+
+
 def fetch_all() -> pd.DataFrame:
     print("Fetching historical monthly price spread data (1970-present)...")
     historical = _parse_historical(_get_csv(_HISTORICAL_URL))
@@ -151,6 +203,7 @@ def fetch_all() -> pd.DataFrame:
     combined = pd.concat(
         [historical, beef_current, pork_current, chicken_current], ignore_index=True
     )
+    combined = add_share_series(combined)
     combined = combined.dropna(subset=["date", "Value"])
     combined = combined.sort_values(["commodity_desc", "series_label", "date"]).reset_index(drop=True)
     return combined

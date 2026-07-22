@@ -3,6 +3,7 @@ USDA Meat Price Spreads Dashboard
 Run: python app.py
 """
 
+import colorsys
 import pathlib
 import re
 import pandas as pd
@@ -40,6 +41,22 @@ for _f in (forecasts, fitted):
 
 ALL_SERIES_KEYS = set(df["series_key"].unique())
 
+
+def series_type_of(label: str) -> str:
+    """Bucket a series_label into one of three mutually-exclusive scales so the
+    Series dropdown never mixes ¢/lb values with ¢/lb spreads with % shares —
+    those aren't meaningfully comparable on one y-axis."""
+    l = label.lower()
+    if l.endswith("share of retail value"):
+        return "Shares of retail value"
+    if l.endswith("spread"):
+        return "Spreads"
+    return "Values"
+
+
+SERIES_TYPES = ["Shares of retail value", "Values", "Spreads"]
+df["series_type"] = df["series_label"].map(series_type_of)
+
 # Last actual observation per series — forecasts are only drawn when the
 # selected date range reaches the series' end, so they stay adjacent
 SERIES_LAST_DATE = df.groupby("series_key")["date"].max()
@@ -49,17 +66,32 @@ FITTED_FIRST_DATE = (
     if not fitted.empty else pd.Series(dtype="datetime64[ns]")
 )
 
-# Default series shown per commodity when it's added to the Commodity filter —
-# the "headline" retail price; farm/wholesale values and spreads are opt-in via
-# the Series dropdown
-_DEFAULT_SERIES_LABEL = "Retail value"
+# Default series shown per commodity + series-type combination. For shares,
+# default to the full breakdown (farm/wholesale/retail for beef & pork,
+# wholesale/retail only for chicken, which has no published farm value); for
+# Values/Spreads, default to a single "headline" series per commodity.
+_DEFAULT_SHARE_SERIES = [
+    "Farm share of retail value",
+    "Wholesale share of retail value",
+    "Retail share of retail value",
+]
+_DEFAULT_VALUE_SERIES = "Retail value"
+_DEFAULT_SPREAD_SERIES = "Wholesale-to-retail spread"
 
-def default_series(commodity_list):
+def default_series(commodity_list, series_type):
     defaults = []
     for commodity in commodity_list:
-        key = f"{display_name(commodity)} — {_DEFAULT_SERIES_LABEL}"
-        if key in ALL_SERIES_KEYS:
-            defaults.append(key)
+        name = display_name(commodity)
+        if series_type == "Shares of retail value":
+            defaults.extend(
+                f"{name} — {label}" for label in _DEFAULT_SHARE_SERIES
+                if f"{name} — {label}" in ALL_SERIES_KEYS
+            )
+        else:
+            label = _DEFAULT_SPREAD_SERIES if series_type == "Spreads" else _DEFAULT_VALUE_SERIES
+            key = f"{name} — {label}"
+            if key in ALL_SERIES_KEYS:
+                defaults.append(key)
     return defaults
 
 MONTHS = [
@@ -77,7 +109,44 @@ _PALETTES = {
     "monochrome": ["#111111", "#444444", "#777777", "#aaaaaa", "#cccccc", "#000000"],
 }
 
+# Each commodity gets one base hue; different series within it are shades of
+# that hue (see _shade), so beef/pork/chicken stay identifiable by color at a
+# glance regardless of how many series are on screen. Not applied in
+# monochrome, which keeps its own flat grayscale sequence.
+_COMMODITY_BASE_COLORS = {
+    "default": {"Beef": "#2CA02C", "Pork": "#1F77B4", "Chicken": "#FF7F0E"},
+    "colorblind": {"Beef": "#009E73", "Pork": "#0072B2", "Chicken": "#E69F00"},
+}
+
+# series_key -> series_type, used to group "siblings" for shading (series
+# within the same commodity AND the same type — values / spreads / shares —
+# so the lightness range isn't diluted by types that aren't even on screen)
+_SERIES_KEY_TYPE = df.drop_duplicates("series_key").set_index("series_key")["series_type"].to_dict()
+
+def _shade(hex_color: str, index: int, count: int) -> str:
+    """The index-th of `count` lightness variants of hex_color, dark to light."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+    hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
+    if count > 1:
+        lo, hi = 0.32, 0.72
+        lightness = lo + (hi - lo) * index / (count - 1)
+    r2, g2, b2 = colorsys.hls_to_rgb(hue, lightness, sat)
+    return "#{:02x}{:02x}{:02x}".format(round(r2 * 255), round(g2 * 255), round(b2 * 255))
+
 def series_color(label: str, all_labels: list, palette: str = "default") -> str:
+    if palette != "monochrome":
+        commodity_name = label.split(" — ", 1)[0] if " — " in label else ""
+        base = _COMMODITY_BASE_COLORS.get(palette, _COMMODITY_BASE_COLORS["default"]).get(commodity_name)
+        if base is not None:
+            label_type = _SERIES_KEY_TYPE.get(label)
+            siblings = [
+                l for l in all_labels
+                if l.startswith(f"{commodity_name} — ") and _SERIES_KEY_TYPE.get(l) == label_type
+            ]
+            idx = siblings.index(label) if label in siblings else 0
+            return _shade(base, idx, len(siblings))
+
     seq = _PALETTES.get(palette, _PALETTES["default"])
     idx = all_labels.index(label) if label in all_labels else 0
     return seq[idx % len(seq)]
@@ -108,7 +177,12 @@ def remove_outliers(series: pd.Series) -> pd.Series:
     return series.where((series - mean).abs() <= 3 * std)
 
 def _short_unit(base_unit: str) -> str:
-    return "¢/lb" if "cent" in base_unit.lower() else base_unit
+    b = base_unit.lower()
+    if "percent" in b:
+        return "%"
+    if "cent" in b:
+        return "¢/lb"
+    return base_unit
 
 def y_axis_label(unit: str, base_unit: str = "¢/lb") -> str:
     base = _short_unit(base_unit)
@@ -182,9 +256,20 @@ app.layout = html.Div(
                         style={"width": "280px", "fontSize": "13px"},
                     ),
                 ]),
+                # Series type
+                html.Div([
+                    html.Label("Series type", style=_label),
+                    dcc.RadioItems(
+                        id="series-type-select",
+                        options=[{"label": f" {t}", "value": t} for t in SERIES_TYPES],
+                        value="Shares of retail value",
+                        inputStyle={"marginRight": "3px"},
+                        labelStyle={"display": "block", "fontSize": "12px", "marginBottom": "2px"},
+                    ),
+                ]),
                 # Series
                 html.Div([
-                    html.Label("Series (stage / spread)", style=_label),
+                    html.Label("Series", style=_label),
                     dcc.Dropdown(
                         id="series-select",
                         multi=True,
@@ -219,7 +304,7 @@ app.layout = html.Div(
                             dcc.Dropdown(id="start-month", options=MONTH_OPTIONS,
                                          value=1, clearable=False, style=_dd_sm),
                             dcc.Dropdown(id="start-year", options=YEAR_OPTIONS,
-                                         value=DATE_MIN.year, clearable=False, style=_dd_yr),
+                                         value=2013, clearable=False, style=_dd_yr),
                         ],
                     ),
                 ]),
@@ -322,13 +407,16 @@ app.layout = html.Div(
     Output("series-select", "options"),
     Output("series-select", "value"),
     Input("commodity-select", "value"),
+    Input("series-type-select", "value"),
 )
-def update_series_options(commodities):
+def update_series_options(commodities, series_type):
     if not commodities:
         return [], []
     commodities = commodities if isinstance(commodities, list) else [commodities]
-    keys = sorted(df[df["commodity_desc"].isin(commodities)]["series_key"].unique())
-    return [{"label": k, "value": k} for k in keys], default_series(commodities)
+    keys = sorted(
+        df[(df["commodity_desc"].isin(commodities)) & (df["series_type"] == series_type)]["series_key"].unique()
+    )
+    return [{"label": k, "value": k} for k in keys], default_series(commodities, series_type)
 
 
 @callback(
@@ -508,11 +596,12 @@ def update_charts(commodities, series_vals, unit,
     line_fig = go.Figure()
     order_lines = []
     forecast_drawn = False
-    hover_fmt = "%{y:,.1f}%" if unit in ("pct", "yoy_pct") else "%{y:,.1f}"
 
     for grp in groups:
         color = series_color(grp, all_labels, palette)
         grp_df = subset[subset["series_key"] == grp].sort_values("date").drop_duplicates("date")
+        is_pct_series = not grp_df.empty and "percent" in str(grp_df["unit_desc"].iloc[0]).lower()
+        hover_fmt = "%{y:,.1f}%" if unit in ("pct", "yoy_pct") or is_pct_series else "%{y:,.1f}"
         y = apply_unit(grp_df["Value"], unit, grp_df["date"])
         if filter_outliers:
             y = remove_outliers(y)
@@ -693,4 +782,4 @@ def update_charts(commodities, series_vals, unit,
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=8051)
+    app.run(debug=False, host="0.0.0.0", port=8052)

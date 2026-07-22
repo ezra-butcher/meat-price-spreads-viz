@@ -35,8 +35,21 @@ Series pulled, per commodity:
 | Farm-to-wholesale spread | ✓ | ✓ | — |
 | Wholesale-to-retail spread | ✓ | ✓ | ✓ |
 | Farm-to-retail spread | ✓ | ✓ | — |
+| Farm share of retail value | ✓ | ✓ | — |
+| Wholesale share of retail value | ✓ | ✓ | ✓ |
+| Retail share of retail value | ✓ | ✓ | ✓ |
 
 Chicken has no farm-value breakout because broiler production is vertically integrated — ERS doesn't publish a comparable farm/wholesale split for it, only wholesale and retail composite prices.
+
+The three **share-of-retail-value** rows are computed in `fetch_data.py`, not pulled from ERS's own (differently-scoped) share columns, so they stay internally consistent with the value series above:
+
+```
+farm share      = net farm value / retail value
+wholesale share = (wholesale value − net farm value) / retail value
+retail share    = (retail value − wholesale value) / retail value
+```
+
+For beef and pork these three sum to 100% of the retail dollar. Chicken gets a 2-way split instead (`wholesale share` + `retail share` only, no farm share) since it has no farm value to subtract — these are the series shown by default when you select a commodity.
 
 Cut-level retail prices (chicken breast, pork chops, specific beef cuts, etc.) and CPI series are also published by ERS on this page but are **not** pulled here — this dashboard is scoped to the farm/wholesale/retail spread structure.
 
@@ -66,7 +79,7 @@ Or run each step individually:
 ```bash
 python fetch_data.py       # ~seconds — pulls the ERS CSV files
 python fit_forecasts.py    # ~10 min — fits SARIMA models for ~20 series
-python app.py              # starts the Dash app on http://localhost:8051
+python app.py              # starts the Dash app on http://localhost:8052
 ```
 
 ## Deployment (Docker + systemd + Tailscale)
@@ -85,7 +98,7 @@ docker run --rm -v "$(pwd)/data:/app/data" meat-price-spreads-viz python fit_for
 # Run the app
 docker run -d \
   --name meat-price-spreads-viz \
-  -p 127.0.0.1:8051:8051 \
+  -p 127.0.0.1:8052:8052 \
   -v "$(pwd)/data:/app/data" \
   meat-price-spreads-viz
 ```
@@ -113,12 +126,21 @@ A cron job runs `refresh_data.sh` monthly after each ERS release (typically mid-
 0 6 15 * * /path/to/meat-price-spreads-viz/refresh_data.sh
 ```
 
-### Running alongside the cold storage dashboard
+### Running alongside the other dashboards on this host
 
-This app listens on port **8051** (the cold storage dashboard uses 8050), so both
-can run on the same host at once. If exposing both via a single Tailscale Funnel
-node, you'll need either a second Funnel port or path-based routing in front of
-both — see `tailscale funnel --help`.
+Three sibling Dash apps share this home server, each on its own port so they
+can run simultaneously:
+
+| App | Port |
+|---|---|
+| `cold-storage-viz` | 8050 |
+| `swine-contract-library` | 8051 |
+| `meat-price-spreads-viz` (this app) | 8052 |
+
+If exposing all three via a single Tailscale Funnel node, you'll need either
+multiple Funnel ports (Funnel only allows 443/8443/10000 publicly) or
+path-based routing via `tailscale serve` in front of all three — see
+`tailscale funnel --help` and `tailscale serve --help`.
 
 ### Embedding in Google Sites
 

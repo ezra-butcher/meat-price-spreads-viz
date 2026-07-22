@@ -12,7 +12,7 @@ ExecStartPre=-/usr/bin/docker rm meat-price-spreads-viz
 # ERS file downloads with no credentials
 ExecStart=/usr/bin/docker run --rm --pull=never --name meat-price-spreads-viz \
     -v /home/user/meat-price-spreads-viz/data:/app/data:rw \
-    -p 127.0.0.1:8051:8051 \
+    -p 127.0.0.1:8052:8052 \
     localhost/meat-price-spreads-viz:latest
 ExecStop=/usr/bin/docker stop meat-price-spreads-viz
 
