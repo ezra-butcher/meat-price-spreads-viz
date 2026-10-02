@@ -135,15 +135,25 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now meat-price-spreads-viz
 ```
 
-### Monthly data refresh
+### Data refresh
 
-Schedule `refresh_data.sh` via cron to run once a month after the ERS release
-(the files are updated mid-month — check the
+ERS updates the files mid-month (check the
 [dataset page](https://www.ers.usda.gov/data-products/meat-price-spreads) for
-the current schedule). The script re-fetches the CSVs, refits all SARIMA
-models, and restarts the service; the final `systemctl restart` step needs
-passwordless sudo scoped to that one command (a one-line file in
-`/etc/sudoers.d/`) to run unattended.
+the current schedule), but the exact day moves, so schedule `refresh_data.sh` to
+poll daily rather than on a fixed date:
+
+```bash
+# Example crontab entry — 6am every day
+0 6 * * * /path/to/meat-price-spreads-viz/refresh_data.sh
+```
+
+Each run re-fetches the CSVs (seconds). Only when the data has changed does it
+refit the SARIMA models (about 10 minutes) and restart the service, so a late
+release, or a run missed during an outage, is picked up the next morning. A fit
+that fails is retried on the next run. Output is logged to `~/logs/`.
+
+The final `systemctl restart` step needs passwordless sudo scoped to that one
+command (a one-line file in `/etc/sudoers.d/`) to run unattended.
 
 ### Tailscale gotcha
 
